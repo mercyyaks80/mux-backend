@@ -36,6 +36,34 @@ jobs:
       - name: Run ESLint
         run: pnpm lint
 
+  migration-naming:
+    name: Prisma Migration Naming
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check Prisma migration naming
+        # #907: Fail-closed gate enforcing the naming rules documented in
+        # docs/PRISMA-MIGRATIONS.md (timestamp-prefixed snake_case dirs,
+        # migration_lock.toml presence, no duplicate timestamps).
+        run: pnpm run prisma:check-migrations
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
@@ -121,8 +149,6 @@ jobs:
 
       - name: Run e2e tests
         run: pnpm test:e2e
-      - name: Check Prisma migration naming
-        run: pnpm run prisma:check-migrations
 
       - name: Build
         run: pnpm run build
