@@ -42,6 +42,16 @@ export enum ErrorCode {
   EXPORT_DOWNLOAD_EXPIRED = 'EXPORT_DOWNLOAD_EXPIRED',
   EXPORT_TOO_LARGE = 'EXPORT_TOO_LARGE',
 
+  // Backup / restore (fail-closed)
+  BACKUP_NOT_FOUND = 'BACKUP_NOT_FOUND',
+  BACKUP_NOT_READY = 'BACKUP_NOT_READY',
+  BACKUP_IN_PROGRESS = 'BACKUP_IN_PROGRESS',
+  BACKUP_INTEGRITY_FAILED = 'BACKUP_INTEGRITY_FAILED',
+  RESTORE_FORBIDDEN = 'RESTORE_FORBIDDEN',
+  RESTORE_CONFLICT = 'RESTORE_CONFLICT',
+  RESTORE_IN_PROGRESS = 'RESTORE_IN_PROGRESS',
+  RESTORE_POINT_INVALID = 'RESTORE_POINT_INVALID',
+
   // Validation
   VALIDATION_FAILED = 'VALIDATION_FAILED',
 }
@@ -122,6 +132,14 @@ const DEFAULT_STATUS_BY_CODE: Record<ErrorCode, number> = {
   [ErrorCode.EXPORT_DOWNLOAD_FORBIDDEN]: 403,
   [ErrorCode.EXPORT_DOWNLOAD_EXPIRED]: 410,
   [ErrorCode.EXPORT_TOO_LARGE]: 413,
+  [ErrorCode.BACKUP_NOT_FOUND]: 404,
+  [ErrorCode.BACKUP_NOT_READY]: 409,
+  [ErrorCode.BACKUP_IN_PROGRESS]: 409,
+  [ErrorCode.BACKUP_INTEGRITY_FAILED]: 422,
+  [ErrorCode.RESTORE_FORBIDDEN]: 403,
+  [ErrorCode.RESTORE_CONFLICT]: 409,
+  [ErrorCode.RESTORE_IN_PROGRESS]: 409,
+  [ErrorCode.RESTORE_POINT_INVALID]: 422,
   [ErrorCode.VALIDATION_FAILED]: 422,
 };
 
@@ -150,6 +168,14 @@ const GENERIC_MESSAGE_BY_CODE: Record<ErrorCode, string> = {
   [ErrorCode.EXPORT_DOWNLOAD_FORBIDDEN]: 'You are not allowed to download this export.',
   [ErrorCode.EXPORT_DOWNLOAD_EXPIRED]: 'This export download link has expired.',
   [ErrorCode.EXPORT_TOO_LARGE]: 'Requested export exceeds the maximum allowed size.',
+  [ErrorCode.BACKUP_NOT_FOUND]: 'Backup not found.',
+  [ErrorCode.BACKUP_NOT_READY]: 'Backup is not ready.',
+  [ErrorCode.BACKUP_IN_PROGRESS]: 'A backup is already in progress.',
+  [ErrorCode.BACKUP_INTEGRITY_FAILED]: 'Backup integrity verification failed.',
+  [ErrorCode.RESTORE_FORBIDDEN]: 'You are not allowed to restore from this backup.',
+  [ErrorCode.RESTORE_CONFLICT]: 'Restore conflicts with current state.',
+  [ErrorCode.RESTORE_IN_PROGRESS]: 'A restore is already in progress.',
+  [ErrorCode.RESTORE_POINT_INVALID]: 'The requested restore point is invalid.',
   [ErrorCode.VALIDATION_FAILED]: 'Validation failed.',
 };
 
@@ -207,13 +233,10 @@ export function buildErrorEnvelope(
   };
 
   if (input.details && input.details.length > 0) {
-    const details = input.details.map((detail) => ({
+    envelope.details = input.details.map((detail) => ({
       ...detail,
       message: redactSensitive(detail.message),
     }));
-    if (details.length > 0) {
-      envelope.details = details;
-    }
   }
 
   if (!isProduction && input.debug) {
