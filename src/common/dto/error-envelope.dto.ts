@@ -1,9 +1,11 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
 /**
- * Stable, machine-readable error codes for the Mux backend error envelope.
+ * Stable, machine-readable error codes returned by the API.
  *
- * These codes are part of the public API contract: clients (wallets, AA
- * providers, payment flows) branch on them, so they MUST remain stable across
- * releases. Add new codes; never repurpose or renumber existing ones.
+ * These codes are part of the public contract: clients (wallets, AA
+ * providers, payment flows) branch on them, so they must remain stable
+ * across releases. Add new codes; never repurpose existing ones.
  */
 export enum ErrorCode {
   // Generic / transport
@@ -53,44 +55,72 @@ export enum ErrorCode {
   RESTORE_POINT_INVALID = 'RESTORE_POINT_INVALID',
 
   // Validation
+  /** Request failed validation (bad/oversized payload, malformed input). */
   VALIDATION_FAILED = 'VALIDATION_FAILED',
+  /** Caller is not authenticated (missing/invalid/expired credentials). */
+  UNAUTHENTICATED = 'UNAUTHENTICATED',
+  /** Caller is authenticated but not permitted for this resource/action. */
+  FORBIDDEN = 'FORBIDDEN',
+  /** Requested resource does not exist (or is not visible to the caller). */
+  NOT_FOUND = 'NOT_FOUND',
+  /** Conflicting state, e.g. replayed request with a different payload. */
+  CONFLICT = 'CONFLICT',
+  /** Rate limit exceeded for the caller/route. */
+  RATE_LIMITED = 'RATE_LIMITED',
+  /** A required upstream dependency (RPC/DB/Horizon) is unavailable. */
+  DEPENDENCY_UNAVAILABLE = 'DEPENDENCY_UNAVAILABLE',
+  /** Unexpected server-side failure. */
+  INTERNAL_ERROR = 'INTERNAL_ERROR',
 }
 
 /**
- * A single field-level validation detail. Safe to expose in production.
- */
-export interface ErrorDetail {
-  /** Dotted path to the offending field, e.g. `body.amount`. */
-  field?: string;
-  /** Human-readable, non-sensitive explanation. */
-  message: string;
-  /** Optional stable sub-code for programmatic handling. */
-  code?: string;
-}
-
-/**
- * The canonical error envelope returned by every Mux backend entrypoint.
+ * Canonical error envelope returned for every failed request.
  *
- * Invariants:
- *  - `requestId` is ALWAYS present so clients and ops can correlate a failure
- *    with server logs/metrics.
- *  - `code` is a stable {@link ErrorCode} value, never a raw exception name.
- *  - `message` is safe for production: no stack traces, internal messages,
- *    secrets, JWTs, or raw key material.
- *  - `details` and `debug` are only populated outside production.
+ * `correlationId` is echoed from the inbound request (or generated) so that
+ * operators can trace a failure across logs without exposing secrets or raw
+ * key material. `message` is safe for clients; never include tokens, JWTs,
+ * webhook secrets, or key material here.
  */
-export interface ErrorEnvelope {
-  /** Stable, machine-readable error code. */
-  code: ErrorCode;
-  /** Safe, human-readable summary. */
-  message: string;
-  /** Correlation id for this request; always present. */
-  requestId: string;
-  /** HTTP status code mirrored for convenience. */
-  statusCode: number;
-  /** Optional field-level details (safe in production). */
-  details?: ErrorDetail[];
-  /** Verbose diagnostics; only populated in non-production. */
+export class ErrorEnvelopeDto {
+  @ApiProperty({
+    description: 'Stable, machine-readable error code.',
+    enum: ErrorCode,
+    example: ErrorCode.FORBIDDEN,
+  })
+  code!: ErrorCode;
+
+  @ApiProperty({
+    description: 'Human-readable, client-safe error message.',
+    example: 'Request is not permitted.',
+  })
+  message!: string;
+
+  @ApiProperty({
+    description:
+      'Correlation id for tracing this request across logs and services.',
+    example: '3f1c9b2e-8a4d-4c1e-9f2a-1b2c3d4e5f60',
+  })
+  correlationId!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional structured details (e.g. field-level validation errors).',
+    type: 'object',
+    additionalProperties: true,
+  })
+  details?: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    description: 'HTTP status code mirrored for convenience.',
+    example: 403,
+  })
+  statusCode?: number;
+
+  @ApiPropertyOptional({
+    description: 'Verbose diagnostics; only populated in non-production.',
+    type: 'object',
+    additionalProperties: true,
+  })
   debug?: Record<string, unknown>;
 }
 
@@ -204,7 +234,7 @@ export function redactSensitive(input: string): string {
 }
 
 /**
- * Build a production-safe {@link ErrorEnvelope}.
+ * Build a production-safe {@link ErrorEnvelopeDto}.
  *
  * In production (`isProduction === true`) the envelope is fail-closed:
  *  - `message` falls back to a generic, code-derived string.
@@ -219,16 +249,16 @@ export function buildErrorEnvelope(
   input: RawErrorInput,
   requestId: string,
   isProduction: boolean,
-): ErrorEnvelope {
+): ErrorEnvelopeDto {
   const code = input.code ?? ErrorCode.INTERNAL_ERROR;
   const statusCode = input.statusCode ?? DEFAULT_STATUS_BY_CODE[code] ?? 500;
 
-  const envelope: ErrorEnvelope = {
+  const envelope: ErrorEnvelopeDto = {
     code,
     message: isProduction
       ? GENERIC_MESSAGE_BY_CODE[code] ?? 'Request failed.'
       : redactSensitive(input.message ?? GENERIC_MESSAGE_BY_CODE[code] ?? 'Request failed.'),
-    requestId,
+    correlationId: requestId,
     statusCode,
   };
 
@@ -244,4 +274,5 @@ export function buildErrorEnvelope(
   }
 
   return envelope;
+}
 }
