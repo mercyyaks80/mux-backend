@@ -1,45 +1,46 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import {
-  AuthProvider,
-  isValidAuthProvider,
-  getValidProviderNames,
-} from './auth-provider.enum';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { AuthProvider, isValidAuthProvider } from './auth-provider.enum';
 
-/**
- * Validates authentication payloads from identity providers.
- *
- * Fail-closed: invalid or missing claims are rejected.
- */
-@Injectable()
+export interface AuthPayload {
+  authId: string;
+  authProvider: AuthProvider;
+}
+
 export class AuthPayloadValidator {
-  authId!: string;
-  email?: string;
-  displayName?: string;
-  authProvider?: AuthProvider | string | null;
-  network?: string;
-
-  private static readonly logger = new Logger(AuthPayloadValidator.name);
-
-  static validate(payload: any): void {
+  /**
+   * Fail-closed: invalid or missing claims are rejected.
+   */
+  static validate(payload: Partial<AuthPayload> | null | undefined): void {
     if (!payload) {
-      throw new BadRequestException('Payload is required');
+      throw new BadRequestException('Missing auth payload');
     }
 
-    if (payload.authProvider !== undefined && payload.authProvider !== null) {
-      if (typeof payload.authProvider !== 'string') {
-        throw new BadRequestException('authProvider must be a string');
-      }
+    if (payload.authId === undefined || payload.authId === null) {
+      throw new BadRequestException('Missing authId');
+    }
 
-      if (payload.authProvider.trim() === '') {
-        throw new BadRequestException('authProvider cannot be empty');
-      }
+    if (typeof payload.authId !== 'string') {
+      throw new BadRequestException('authId must be a string');
+    }
 
-      if (!isValidAuthProvider(payload.authProvider)) {
-        const validNames = getValidProviderNames().join(', ');
-        throw new BadRequestException(
-          `authProvider must be one of: ${validNames}`,
-        );
-      }
+    if (payload.authId.trim() === '') {
+      throw new BadRequestException('authId must not be empty');
+    }
+
+    if (payload.authProvider === undefined || payload.authProvider === null) {
+      throw new BadRequestException('Missing authProvider');
+    }
+
+    if (typeof payload.authProvider !== 'string') {
+      throw new BadRequestException('authProvider must be a string');
+    }
+
+    if (payload.authProvider.trim() === '') {
+      throw new BadRequestException('authProvider must not be empty');
+    }
+
+    if (!isValidAuthProvider(payload.authProvider)) {
+      throw new BadRequestException('Invalid authProvider');
     }
   }
 }
@@ -48,20 +49,14 @@ export class AuthPayloadValidator {
 export class AuthOrchestratorService {
   private readonly logger = new Logger(AuthOrchestratorService.name);
 
-  validatePayload(payload: AuthPayloadValidator): boolean {
-    if (!payload.authId) {
-      this.logger.warn('Missing authId in payload');
-      return false;
-    }
-
+  validatePayload(payload: Partial<AuthPayload> | null | undefined): boolean {
     try {
       AuthPayloadValidator.validate(payload);
       return true;
     } catch (error) {
-      this.logger.warn('Invalid authProvider', {
-        provider: payload.authProvider,
-        error: (error as Error).message,
-      });
+      this.logger.warn(
+        `Rejected auth payload: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
       return false;
     }
   }
