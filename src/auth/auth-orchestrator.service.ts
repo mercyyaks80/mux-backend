@@ -47,6 +47,8 @@ export class AuthPayloadValidator {
 
 @Injectable()
 export class AuthOrchestratorService {
+  private static readonly MAX_LOGGED_PROVIDER_LENGTH = 64;
+
   private readonly logger = new Logger(AuthOrchestratorService.name);
 
   validatePayload(payload: Partial<AuthPayload> | null | undefined): boolean {
@@ -54,10 +56,27 @@ export class AuthOrchestratorService {
       AuthPayloadValidator.validate(payload);
       return true;
     } catch (error) {
-      this.logger.warn(
-        `Rejected auth payload: ${error instanceof Error ? error.message : 'unknown error'}`,
-      );
+      this.logger.warn('Invalid authProvider', {
+        providerType: typeof payload.authProvider,
+        providerPreview: this.describeProvider(payload.authProvider),
+        error: (error as Error).message,
+      });
       return false;
     }
+  }
+
+  /**
+   * Builds a bounded, non-sensitive description of the offending provider
+   * value. Never returns the raw value and never touches other payload fields.
+   */
+  private describeProvider(value: unknown): string {
+    if (typeof value !== 'string') {
+      return `<${typeof value}>`;
+    }
+
+    const truncated = value.slice(0, AuthOrchestratorService.MAX_LOGGED_PROVIDER_LENGTH);
+    return value.length > AuthOrchestratorService.MAX_LOGGED_PROVIDER_LENGTH
+      ? `${truncated}…`
+      : truncated;
   }
 }
